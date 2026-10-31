@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('gdrive_copy.static',filename='copy.css') }}">
+<section class="gc" id="gc" data-page="{{ page }}" data-csrf="{{ csrf }}" data-endpoint="{{ url_for('gdrive_copy.second_ajax',module_name='copy',cmd='COMMAND') }}">
+  <header><span class="gc-kicker">GOOGLE DRIVE</span><h3>{{ {'request':'개별 복사 요청','settings':'복사 설정','history':'다운로드 목록','logs':'작업 로그'}[page] }}</h3></header>
+  <div id="gc-note" role="status" aria-live="polite"></div>
+  {% if page == 'request' %}
+  <form id="gc-request" class="gc-panel">
+    <label for="link">Google Drive 폴더 링크 또는 소스 ID</label>
+    <input id="link" name="link" required autocomplete="off" placeholder="https://drive.google.com/drive/folders/…">
+    <label for="base">기본 Remote</label>
+    <input id="base" name="base" value="{{ conf.base }}" required placeholder="endells_gg:/FF/">
+    <p class="gc-help">기본 경로까지만 입력하세요. 그 아래에 원본 제목의 폴더가 생성됩니다.</p>
+    <div class="gc-actions"><button type="button" id="preview">폴더·크기 확인</button><button class="gc-primary" type="submit">복사 요청</button></div>
+  </form>
+  <div id="gc-preview" class="gc-panel" hidden></div>
+  <h5>최근 요청</h5><div id="gc-recent"></div>
+  <a href="{{ url_for('gdrive_copy.second_menu',sub='copy',sub2='history') }}">다운로드 목록 전체 보기 →</a>
+  {% elif page == 'settings' %}
+  <form id="gc-settings">
+    <fieldset class="gc-panel"><legend>리모트</legend>
+      <label for="base">기본 Remote</label><input id="base" name="base" required value="{{ conf.base }}" placeholder="endells_gg:/FF/">
+      <label for="source">소스 리모트 <small>선택</small></label><input id="source" name="source" value="{{ conf.source }}" placeholder="비우면 기본 Remote 계정 사용">
+      <p class="gc-help">원본을 읽을 Google Drive OAuth 리모트 이름만 입력하세요. FF rclone의 실행 파일과 설정 파일을 사용합니다.</p>
+      <label for="mode">복사 방식</label><select id="mode" name="mode"><option value="rclone" {% if conf.mode=='rclone' %}selected{% endif %}>rclone 직접 복사</option><option value="gds" {% if conf.mode=='gds' %}selected{% endif %}>기존 구드공 워커 연동</option></select>
+      <p class="gc-help">구드공 연동은 설치된 gds_tool의 개별 요청 워커를 사용합니다.</p>
+      <label for="limit">요청당 최대 파일 수</label><input type="number" id="limit" name="limit" min="1" max="100000" value="{{ conf.limit }}" required>
+    </fieldset>
+    <fieldset class="gc-panel"><legend>텔레그램 링크 수신</legend>
+      <label class="gc-check"><input type="checkbox" name="telegram" value="1" {% if conf.telegram %}checked{% endif %}>자동 수신 사용</label>
+      <label for="token">전용 봇 토큰</label><input type="password" id="token" name="token" autocomplete="new-password" placeholder="{% if conf.has_token %}등록됨 · 비우면 기존 토큰 유지{% else %}BotFather에서 받은 토큰{% endif %}">
+      <label class="gc-check"><input type="checkbox" name="clear_token" value="1">저장한 토큰 삭제</label>
+      <label for="chat">허용할 대화방</label><input id="chat" name="chat" value="{{ conf.chat }}" placeholder="숫자 ID 또는 공개 채널 @이름">
+      <label for="interval">수신 간격 (분)</label><input id="interval" type="number" name="interval" min="1" max="1440" value="{{ conf.interval }}" required>
+      <p class="gc-help">이 봇을 대화방에 추가하세요. 다른 다운로더와 봇 토큰을 공유하면 수신이 충돌합니다. 개인 대화·그룹·채널의 본문, 캡션, 숨은 링크를 확인합니다.</p>
+    </fieldset>
+    <div class="gc-actions"><button class="gc-primary" type="submit">설정 저장</button><button id="gc-poll" type="button">지금 수신</button></div>
+  </form>
+  {% elif page=='history' %}
+  <form class="gc-actions" id="gc-filter">
+    <input type="search" name="search" placeholder="폴더명 · 소스 ID · Remote 검색" aria-label="목록 검색">
+    <select name="state" aria-label="작업 상태"><option value="">전체 상태</option><option value="queued">대기</option><option value="running">진행 중</option><option value="done">완료</option><option value="failed">실패</option></select>
+    <button type="submit">조회</button>
+  </form>
+  <div id="gc-rows"></div>
+  <div class="gc-actions"><button id="gc-prev">이전</button><span id="gc-pages"></span><button id="gc-next">다음</button></div>
+  {% else %}
+  <div class="gc-actions"><span>최근 200건 · 한국시간</span><button id="gc-refresh">새로고침</button></div><div id="gc-logs"></div>
+  {% endif %}
+</section>
+<script defer src="{{ url_for('gdrive_copy.static',filename='copy.js') }}"></script>
+{% endblock %}
