@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="{{ url_for('gdrive_copy.static', filename='copy.css', v=version) }}">
 <section class="gc" id="gc" data-page="{{ page }}" data-csrf="{{ csrf }}" data-endpoint="{{ url_for('gdrive_copy.second_ajax', module_name='copy', cmd='COMMAND') }}">
   <header class="gc-heading">
-    <h3>구글 드라이브 개별 복사</h3>{% if version %}<span>v{{ version }}</span>{% endif %}
+    <h3>구드공 개별복사</h3>{% if version %}<span>v{{ version }}</span>{% endif %}
   </header>
   <div class="gc-status">
     <strong>작업 상태</strong>

@@ -1,4 +1,4 @@
-# 구글 드라이브 개별 복사 0.1.1
+# 구드공 개별복사 0.1.2
 
 Google Drive 폴더 링크나 ID를 받아 FF의 rclone 리모트에 원본 폴더명으로 복사하는 FlaskFarm 플러그인입니다. 수동 요청과 텔레그램 요청은 같은 다운로드 목록에 기록됩니다.
 
@@ -11,7 +11,7 @@ Google Drive 폴더 링크나 ID를 받아 FF의 rclone 리모트에 원본 폴�
    https://github.com/endells/gdrive_copy
    ```
 
-3. 설치 완료 후 FF를 재시작하고 **구글 드라이브 개별 복사 → 설정**을 엽니다.
+3. 설치 완료 후 FF를 재시작하고 **구드공 개별복사 → 설정**을 엽니다.
 
 이전에 ZIP으로 설치했다면 FF를 중지하고 기존 `plugins/gdrive_copy` 폴더를 `plugins` 바깥에 백업한 뒤 FF를 시작해 위 절차를 진행하세요. 설정과 이력은 FF 데이터 폴더의 `db/gdrive_copy_queue.db`에 보관됩니다.
 
