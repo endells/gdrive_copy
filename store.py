@@ -147,6 +147,12 @@ class Store:
                               + where + ' ORDER BY id DESC LIMIT 20 OFFSET ?', (*args, (page - 1)*20))
             return {'rows': [dict(row) for row in rows], 'page': page, 'total': total}
 
+    def status(self):
+        with self.db() as db:
+            queued = db.execute("SELECT COUNT(*) FROM jobs WHERE state='queued'").fetchone()[0]
+            active = db.execute("SELECT id,title,source_id,detail FROM jobs WHERE state='running' ORDER BY id LIMIT 1").fetchone()
+            return {'queued': queued, 'active': dict(active) if active else None}
+
     def logs(self):
         with self.db() as db:
             return [dict(row) for row in db.execute('SELECT * FROM events ORDER BY id DESC LIMIT 200')]

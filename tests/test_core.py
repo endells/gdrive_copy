@@ -148,3 +148,41 @@ class GdsTest(unittest.TestCase):
         with self.assertRaisesRegex(CopyError,'다른 경로'):
             Gds(p).submit({'gds_id':None,'source_id':FID}, BASE+'/제목')
         p.add_copy.assert_not_called()
+
+
+class TelegramConnectionTest(unittest.TestCase):
+    def test_channel_check_does_not_consume_updates(self):
+        from gdrive_copy.telegram import check_connection
+        calls = []
+        def call(token, method, params):
+            calls.append((method, params))
+            return {'getMe': {'id': 42, 'username': 'drive_test_bot'}, 'getWebhookInfo': {},
+                    'getChat': {'id': -1001234567890, 'title': '복사 채널', 'type': 'channel'},
+                    'getChatMember': {'status': 'administrator'}}[method]
+        message = check_connection({'token': 'test', 'chat': '@drive_test'}, call)
+        self.assertIn('@drive_test_bot', message)
+        self.assertIn('복사 채널 (-1001234567890)', message)
+        self.assertEqual(calls, [('getMe', {}), ('getWebhookInfo', {}), ('getChat', {'chat_id':'@drive_test'}),
+                                 ('getChatMember', {'chat_id':-1001234567890, 'user_id':42})])
+
+    def test_channel_missing_admin_and_private_chat(self):
+        from gdrive_copy.telegram import check_connection
+        conf = {'token': 'test', 'chat': '12345'}
+        results = {'getMe': {'id': 42, 'username':'test_bot'}, 'getWebhookInfo':{},
+                   'getChat':{'id':12345, 'type':'channel'}, 'getChatMember':{'status':'left'}}
+        def call(token, method, params):
+            return results[method]
+        with self.assertRaisesRegex(CopyError, '관리자'):
+            check_connection(conf, call)
+        results['getChat'] = {'id':12345, 'type':'private', 'first_name':'개인'}
+        del results['getChatMember']
+        self.assertIn('개인 (12345)', check_connection(conf, call))
+
+    def test_empty_config_and_webhook(self):
+        from gdrive_copy.telegram import check_connection
+        def call(token, method, params):
+            return {'getMe': {'id':1,'username':'test_bot'}, 'getWebhookInfo': {'url':'https://example.org'}}[method]
+        with self.assertRaisesRegex(CopyError, '먼저 저장'):
+            check_connection({'token':'', 'chat':''}, call)
+        with self.assertRaisesRegex(CopyError, '웹훅'):
+            check_connection({'token':'test','chat':'12345'}, call)

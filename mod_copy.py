@@ -13,7 +13,7 @@ from plugin import PluginModuleBase
 from .drive import Drive, Gds, check_size, inspect_job
 from .links import CopyError, REMOTE, base_path, source_link
 from .store import Store
-from .telegram import check_settings, poll
+from .telegram import check_connection, check_settings, poll
 
 
 @contextmanager
@@ -172,27 +172,36 @@ class ModuleCopy(PluginModuleBase):
         conf['has_token'] = bool(conf.pop('token'))
         if 'gdrive_copy_csrf' not in session:
             session['gdrive_copy_csrf'] = secrets.token_urlsafe(32)
-        return render_template('gdrive_copy.html', page=page, conf=conf, csrf=session['gdrive_copy_csrf'])
+        return render_template('gdrive_copy.html', page=page, conf=conf, csrf=session['gdrive_copy_csrf'],
+                               version=self.P.plugin_info.get('version', ''), status=self.store.status())
 
-    def save(self, form):
+    def save(self, form, section):
         with file_lock(self.root / 'gdrive_copy_settings.lock') as fd:
             if fd is None:
                 raise CopyError('설정을 저장 중입니다. 잠시 후 다시 시도하세요.')
             conf = self.store.settings()
-            conf.update(base=base_path(form.get('base')), source=form.get('source', '').strip(),
-                        limit=number(form.get('limit'), 1, 100000, '파일 수 한도'),
-                        mode=form.get('mode'), telegram=form.get('telegram') == '1',
-                        chat=form.get('chat', '').strip(), interval=number(form.get('interval'), 1, 1440, '수신 간격(분)'))
-            if conf['source'] and not REMOTE.fullmatch(conf['source']):
-                raise CopyError('소스 리모트에는 콜론 없이 rclone 리모트 이름만 입력하세요.')
-            if conf['mode'] not in ('gds', 'rclone'):
-                raise CopyError('복사 방식을 확인하세요.')
-            token = form.get('token', '').strip()
-            if token or form.get('clear_token') == '1':
-                conf['token'] = token
+            if section in ('settings', 'copy_settings'):
+                conf.update(base=base_path(form.get('base')), source=form.get('source', '').strip(),
+                            limit=number(form.get('limit'), 1, 100000, '파일 수 한도'), mode=form.get('mode'))
+                if conf['source'] and not REMOTE.fullmatch(conf['source']):
+                    raise CopyError('소스 리모트에는 콜론 없이 rclone 리모트 이름만 입력하세요.')
+                if conf['mode'] not in ('gds', 'rclone'):
+                    raise CopyError('복사 방식을 확인하세요.')
+            if section in ('settings', 'telegram_settings'):
+                conf.update(telegram=form.get('telegram') == '1', chat=form.get('chat', '').strip(),
+                            interval=number(form.get('interval'), 1, 1440, '수신 간격(분)'))
+                token = form.get('token', '').strip()
+                if form.get('clear_token') == '1':
+                    if conf['telegram'] or token:
+                        raise CopyError('저장된 토큰을 삭제하려면 수신을 끄고 새 토큰 입력란을 비우세요.')
+                    conf['token'] = ''
+                elif token:
+                    conf['token'] = token
             check_settings(conf)
             self.store.save(conf)
         self.tg_wake.set()
+        if section == 'telegram_settings':
+            return {'has_token': bool(conf['token']), 'message': '텔레그램 설정을 저장했습니다.'}
         return '설정을 저장했습니다.'
 
     def process_ajax(self, sub, req):
@@ -203,8 +212,12 @@ class ModuleCopy(PluginModuleBase):
             return jsonify(ok=False, error='페이지를 새로고침한 뒤 다시 시도하세요.'), 403
         f = req.form
         try:
-            if sub == 'settings':
-                result = self.save(f)
+            if sub in ('settings', 'copy_settings', 'telegram_settings'):
+                result = self.save(f, sub)
+            elif sub == 'check_connection':
+                result = check_connection(self.store.settings())
+            elif sub == 'status':
+                result = self.store.status()
             elif sub in ('add', 'preview'):
                 conf = self.store.settings()
                 fid, key = source_link(f.get('link'))

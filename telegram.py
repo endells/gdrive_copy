@@ -18,6 +18,10 @@ def api(token, method, params):
     try:
         res = requests.post('https://api.telegram.org/bot' + token + '/' + method, json=params,
                             timeout=(5, 15), allow_redirects=False)
+        if res.status_code == 401:
+            raise CopyError('봇 토큰 인증 실패 · BotFather의 API Token 전체를 다시 저장하세요.')
+        if res.status_code in (400, 403) and method in ('getChat', 'getChatMember'):
+            raise CopyError('대화방을 확인할 수 없습니다. 채널 ID와 봇의 채널 관리자 등록을 확인하세요.')
         if res.status_code == 409:
             raise CopyError('텔레그램 봇 충돌 · 기존 웹훅 또는 다른 수신 프로그램을 확인하세요.')
         if res.status_code != 200:
@@ -31,11 +35,33 @@ def api(token, method, params):
     raise CopyError('텔레그램 연결 또는 응답 확인에 실패했습니다.')
 
 
+def check_webhook(token, call):
+    if call(token, 'getWebhookInfo', {}).get('url'):
+        raise CopyError('웹훅이 설정된 봇입니다. 수신 전용 봇을 지정하세요.')
+
+
+def check_connection(conf, call=api):
+    token, chat_id = conf['token'], conf['chat']
+    if not token or not chat_id:
+        raise CopyError('전용 봇 토큰과 대화방을 입력하고 텔레그램 설정을 먼저 저장하세요.')
+    bot = call(token, 'getMe', {})
+    check_webhook(token, call)
+    chat = call(token, 'getChat', {'chat_id': chat_id})
+    if chat['type'] != 'private':
+        member = call(token, 'getChatMember', {'chat_id': chat['id'], 'user_id': bot['id']})
+        status = member['status']
+        if chat['type'] == 'channel' and status not in ('creator', 'administrator'):
+            raise CopyError('채널 관리자의 관리자 추가 메뉴에서 @%s 봇을 추가하세요.' % bot['username'])
+        if status in ('left', 'kicked') or (status == 'restricted' and not member.get('is_member')):
+            raise CopyError('봇이 이 대화방의 멤버인지 확인하세요.')
+    name = chat.get('title') or chat.get('first_name') or str(chat['id'])
+    return '연결 확인 완료 · 봇 @%s · %s (%s)' % (bot['username'], name, chat['id'])
+
+
 def poll(store, conf, call=api):
     if not conf['telegram']:
         raise CopyError('텔레그램 수신을 켜고 설정을 저장하세요.')
-    if call(conf['token'], 'getWebhookInfo', {}).get('url'):
-        raise CopyError('웹훅이 설정된 봇입니다. 수신 전용 봇을 지정하세요.')
+    check_webhook(conf['token'], call)
     chat = conf['chat']
     if chat.startswith('@'):
         chat = str(call(conf['token'], 'getChat', {'chat_id': chat})['id'])

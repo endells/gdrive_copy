@@ -12,9 +12,10 @@
     if (cls) node.className = cls;
     return node;
   }
-  function note(text, error = false) {
-    find('gc-note').textContent = text;
-    find('gc-note').className = error ? 'gc-error' : '';
+  function note(text, error = false, id = 'gc-note') {
+    const output = find(id);
+    output.textContent = text;
+    output.classList.toggle('gc-error', error);
   }
   async function api(cmd, params = {}) {
     const response = await fetch(root.dataset.endpoint.replace(/COMMAND$/, cmd), {
@@ -26,12 +27,12 @@
     if (!body.ok) throw Error(body.error || '요청 실패');
     return body.data;
   }
-  function action(button, fn) {
+  function action(button, fn, noteId = 'gc-note') {
     return async event => {
       event.preventDefault();
       if (button.disabled) return;
       button.disabled = true;
-      try { await fn(); } catch (e) { note(e.message, true); } finally { button.disabled = false; }
+      try { await fn(); } catch (e) { note(e.message, true, noteId); } finally { button.disabled = false; }
     };
   }
   function bytes(n) {
@@ -111,18 +112,58 @@
       note(await api('add', new FormData(form))); await refresh();
     });
   } else if (page === 'settings') {
-    const form = find('gc-settings');
-    form.onsubmit = action(form.querySelector('[type=submit]'), async () => {
-      note(await api('settings', new FormData(form))); form.token.value = ''; form.clear_token.checked = false;
-    });
-    find('gc-poll').onclick = action(find('gc-poll'), async () => note(await api('poll')));
+    const copy = find('gc-settings');
+    copy.onsubmit = action(copy.querySelector('[type=submit]'), async () => {
+      note(await api('copy_settings', new FormData(copy)), false, 'gc-copy-note');
+    }, 'gc-copy-note');
+
+    const tg = find('gc-telegram');
+    let revision = 0;
+    let saved = 0;
+    tg.oninput = () => { revision++; note('', false, 'gc-tg-note'); };
+    tg.onsubmit = action(tg.querySelector('[type=submit]'), async () => {
+      const submitted = revision;
+      const result = await api('telegram_settings', new FormData(tg));
+      saved = submitted;
+      if (saved === revision) {
+        tg.token.value = '';
+        tg.clear_token.checked = false;
+      }
+      find('gc-token-state').textContent = result.has_token
+        ? '토큰 저장됨 · 빈칸으로 저장하면 유지됩니다.' : '저장된 토큰 없음';
+      note(result.message, false, 'gc-tg-note');
+    }, 'gc-tg-note');
+
+    function telegramAction(id, command, progress) {
+      const button = find(id);
+      button.onclick = action(button, async () => {
+        if (revision !== saved) throw Error('변경한 텔레그램 설정을 먼저 저장하세요.');
+        note(progress, false, 'gc-tg-note');
+        note(await api(command), false, 'gc-tg-note');
+      }, 'gc-tg-note');
+    }
+    telegramAction('gc-connect', 'check_connection', '봇과 채널 연결을 확인하고 있습니다…');
+    telegramAction('gc-poll', 'poll', '새 링크를 확인하고 있습니다…');
   } else if (page === 'history') {
     find('gc-filter').onsubmit = event => { event.preventDefault(); current = 1; load(); };
     find('gc-prev').onclick = () => { if (current > 1) current--; load(); };
     find('gc-next').onclick = () => { current++; load(); };
   } else { find('gc-refresh').onclick = load; }
-  if (page !== 'settings') {
-    load();
-    setInterval(() => { if (!document.hidden) load(); }, 8000);
-  }
+  if (page !== 'settings') load();
+  let updating = false;
+  setInterval(async () => {
+    if (document.hidden || updating) return;
+    updating = true;
+    try {
+      const {active, queued} = await api('status');
+      find('gc-active').textContent = active
+        ? '#' + active.id + ' ' + (active.title || active.source_id) + ' · ' + active.detail
+        : '진행 중인 복사 없음';
+      find('gc-queued').textContent = '대기 ' + queued + '건';
+      if (page !== 'settings') await refresh();
+    } catch (e) {
+      find('gc-active').textContent = '상태 갱신 실패 · ' + e.message;
+      find('gc-queued').textContent = '';
+    } finally { updating = false; }
+  }, 8000);
 })();
